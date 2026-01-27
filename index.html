@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Scripts Lua com IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        pre {
+            background-color: #000 !important;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            border-left: 4px solid #3b82f6;
+        }
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                Lua Script AI Generator
+            </h1>
+            <p class="text-slate-400 mt-2">Gere scripts Lua otimizados usando inteligência artificial.</p>
+        </header>
+
+        <main class="glass rounded-2xl p-6 shadow-2xl">
+            <div class="mb-6">
+                <label for="prompt" class="block text-sm font-medium text-slate-300 mb-2">
+                    Descreva o script que você deseja:
+                </label>
+                <textarea 
+                    id="prompt" 
+                    rows="4" 
+                    class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="Ex: Um script de sistema de inventário simples para Roblox..."
+                ></textarea>
+            </div>
+
+            <div class="flex flex-wrap gap-4 mb-8">
+                <button 
+                    onclick="generateScript()" 
+                    id="generateBtn"
+                    class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                >
+                    <span id="btnText">Gerar Script Lua</span>
+                    <div id="spinner" class="loading-spinner hidden"></div>
+                </button>
+                
+                <button 
+                    onclick="copyToClipboard()" 
+                    id="copyBtn"
+                    class="bg-slate-700 hover:bg-slate-600 text-white py-3 px-6 rounded-xl transition-all"
+                >
+                    Copiar Código
+                </button>
+            </div>
+
+            <div id="outputContainer" class="hidden">
+                <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    Código Gerado:
+                </h2>
+                <div id="scriptOutput" class="text-sm font-mono whitespace-pre-wrap"></div>
+            </div>
+
+            <div id="errorMessage" class="hidden mt-4 p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-sm text-center">
+            </div>
+        </main>
+
+        <footer class="mt-8 text-center text-slate-500 text-xs">
+            Powered by Gemini AI • Gerador de Script Lua Interativo
+        </footer>
+    </div>
+
+    <script>
+        const apiKey = ""; // Chave injetada no ambiente
+        const model = "gemini-2.5-flash-preview-09-2025";
+        let lastGeneratedCode = "";
+
+        async function generateScript() {
+            const promptInput = document.getElementById('prompt');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('spinner');
+            const generateBtn = document.getElementById('generateBtn');
+            const outputContainer = document.getElementById('outputContainer');
+            const scriptOutput = document.getElementById('scriptOutput');
+            const errorDiv = document.getElementById('errorMessage');
+
+            if (!promptInput.value.trim()) {
+                showError("Por favor, descreva o que o script deve fazer.");
+                return;
+            }
+
+            // UI State: Loading
+            generateBtn.disabled = true;
+            btnText.textContent = "Gerando...";
+            spinner.classList.remove('hidden');
+            errorDiv.classList.add('hidden');
+            outputContainer.classList.add('hidden');
+
+            const systemPrompt = "Você é um especialista em programação Lua. Gere apenas o código Lua funcional baseado no pedido do usuário. Inclua comentários explicativos em português dentro do código. Não inclua conversas fora do bloco de código, apenas o código formatado em markdown.";
+            const userQuery = `Gere um script Lua para: ${promptInput.value}`;
+
+            let retries = 0;
+            const maxRetries = 5;
+
+            async function makeRequest() {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: userQuery }] }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] }
+                        })
+                    });
+
+                    if (!response.ok) throw new Error('Falha na API');
+
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (text) {
+                        renderOutput(text);
+                    } else {
+                        throw new Error('Resposta vazia');
+                    }
+
+                } catch (error) {
+                    if (retries < maxRetries) {
+                        const delay = Math.pow(2, retries) * 1000;
+                        retries++;
+                        setTimeout(makeRequest, delay);
+                    } else {
+                        showError("Erro ao gerar script após várias tentativas. Verifique sua conexão.");
+                        resetUI();
+                    }
+                }
+            }
+
+            makeRequest();
+        }
+
+        function renderOutput(markdown) {
+            const scriptOutput = document.getElementById('scriptOutput');
+            const outputContainer = document.getElementById('outputContainer');
+            
+            // Limpar markdown code blocks para exibição
+            const cleanCode = markdown.replace(/```lua|```/g, '').trim();
+            lastGeneratedCode = cleanCode;
+            
+            scriptOutput.innerHTML = `<pre><code>${escapeHtml(cleanCode)}</code></pre>`;
+            outputContainer.classList.remove('hidden');
+            resetUI();
+        }
+
+        function resetUI() {
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('btnText').textContent = "Gerar Script Lua";
+            document.getElementById('spinner').classList.add('hidden');
+        }
+
+        function showError(msg) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = msg;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function copyToClipboard() {
+            if (!lastGeneratedCode) return;
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = lastGeneratedCode;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                const copyBtn = document.getElementById('copyBtn');
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = "Copiado!";
+                copyBtn.classList.replace('bg-slate-700', 'bg-emerald-600');
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.classList.replace('bg-emerald-600', 'bg-slate-700');
+                }, 2000);
+            } catch (err) {
+                console.error('Erro ao copiar', err);
+            }
+            document.body.removeChild(textArea);
+        }
+    </script>
+</body>
+</html>
+
+
