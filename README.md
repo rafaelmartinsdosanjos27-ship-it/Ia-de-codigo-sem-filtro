@@ -1,2 +1,2 @@
-# Ia-de-codigo-sem-filtro
-Essa ia é sem filtro
+#IASEMFILTROCODE
+essa é uma IA desenvolvida para códigos lua ela é sem filtro
